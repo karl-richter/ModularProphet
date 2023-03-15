@@ -31,9 +31,8 @@ class Single(Composition):
 
     def forward(self, x):
         components = {}
-        for component in self.components:
-            components[component.name] = component.forward(x)
-        prediction = torch.stack([*components.values()], axis=0).sum(axis=0)
+        prediction = self.components[0].forward(x)
+        components[self.components[0].name] = prediction
         return prediction, components
 
 
