@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
+import torch.nn as nn
+
 from modularprophet.components import Component
 from modularprophet.utils import components_to_summary, validate_inputs
 
 
-class Composition(ABC):
+class Composition(ABC, nn.Module):
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     @abstractmethod

@@ -6,6 +6,7 @@ from modularprophet.compositions import Composition
 from modularprophet.components import Component
 from modularprophet.utils import models_to_summary, validate_inputs
 from modularprophet.lightning import LightningModel
+from modularprophet.utils_lightning import configure_trainer, find_lr
 
 logger = logging.getLogger("experiments")
 
@@ -29,7 +30,6 @@ class Container:
         # Wrap model in LightningModule
         model = LightningModel(
             model=model,
-            metrics=config.get("metrics"),
             compute_components=compute_components,
             optimizer=config.get("training.optimizer"),
         )
@@ -48,7 +48,7 @@ class Container:
         if "learning_rate" in config.get("training").keys():
             model.lr = config.get("training.learning_rate")
         else:
-            model.lr, fig_lr = find_lr(trainer, model, dataloader)
+            model.lr = find_lr(trainer, model, dataloader)
             logger.info(f"Found optimal learning rate: {round(model.lr, 6)}")
         #### Train ####
         logger.info("Starting training")
@@ -68,7 +68,7 @@ class Container:
 
         metrics = pd.DataFrame(metrics_logger.get_last_metrics())
 
-        return model, metrics
+        return model, trainer, metrics
 
     def fit(self):
         pass
@@ -82,12 +82,19 @@ class Model(Container):
         super().__init__("Model")
         validate_inputs([model], [Composition, Component])
         self.models = model
+        self.datamodule = None
+        self.trainer = None
 
-    def fit(self, config, dataloader, experiment_name, target):
-        self.model, metrics = self._train(
-            self.model, config, dataloader, experiment_name, target
+    def fit(self, config, datamodule, experiment_name, target):
+        self.datamodule = datamodule
+        self.models, self.trainer, metrics = self._train(
+            self.models, config, self.datamodule, experiment_name, target
         )
         return metrics
+
+    def predict(self):
+        predictions_raw = self.trainer.predict(self.models, self.datamodule)
+        return predictions_raw
 
 
 class Sequential(Container):

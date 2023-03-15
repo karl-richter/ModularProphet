@@ -17,7 +17,6 @@ class LightningModel(pl.LightningModule):
     def __init__(
         self,
         model,
-        metrics,
         optimizer,
         compute_components=True,
         **kwargs,
@@ -25,7 +24,6 @@ class LightningModel(pl.LightningModule):
         super().__init__()
         self.lr = 0.001
         self.model = model
-        # self.metrics = get_metrics(metrics)
         self._optimizer = optimizer
         self.compute_components = compute_components
 
@@ -66,6 +64,7 @@ class LightningModel(pl.LightningModule):
         x, y = batch
         y_hat, components = self.model.forward(x)
         loss = self.loss_func(y_hat, y["target"])
+        return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
         x, y = batch

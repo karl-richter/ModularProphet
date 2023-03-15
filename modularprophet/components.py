@@ -1,9 +1,13 @@
 from abc import ABC, abstractmethod
+import torch
+import torch.nn as nn
 
 
-class Component(ABC):
-    def __init__(self, name, id=None):
+class Component(ABC, nn.Module):
+    def __init__(self, name, feature, id=None):
+        super().__init__()
         self.name = name
+        self.feature = feature
         self.id = id
 
     @abstractmethod
@@ -18,31 +22,26 @@ class Component(ABC):
 
 
 class Trend(Component):
-    def __init__(
-        self,
-        growth="linear",
-        changepoints=None,
-        n_changepoints: int = 10,
-        changepoints_range: float = 0.8,
-        trend_reg: float = 0,
-        trend_reg_threshold=False,
-        trend_global_local="global",
-    ):
-        super().__init__("Trend")
+    def __init__(self, feature="time"):
+        super().__init__("Trend", feature)
         self.kwargs = locals()
         self.kwargs.pop("self")
         self.kwargs.pop("__class__")
 
-        self.growth = growth
-        self.changepoints = changepoints
-        self.n_changepoints = n_changepoints
-        self.changepoints_range = changepoints_range
-        self.trend_reg = trend_reg
-        self.trend_reg_threshold = trend_reg_threshold
-        self.trend_global_local = trend_global_local
-    
+        self.trend_k0, self.trend_k1 = self.configure_model()
+        self.stationary = False
+
+    def configure_model(self):
+        trend_k0 = nn.Parameter(
+            nn.init.xavier_normal_(torch.randn(1, 1)), requires_grad=True
+        )
+        trend_k1 = nn.Parameter(
+            nn.init.xavier_normal_(torch.randn(1, 1)), requires_grad=True
+        )
+        return trend_k0, trend_k1
+
     def forward(self, x):
-        pass
+        return (self.trend_k0 + self.trend_k1 * x[self.feature], None)
 
 
 class Regressor(Component):
@@ -53,6 +52,6 @@ class Regressor(Component):
         self.kwargs.pop("__class__")
 
         self.id = id
-    
+
     def forward(self, x):
         pass
