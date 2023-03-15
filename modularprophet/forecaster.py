@@ -29,9 +29,11 @@ class ModularProphet:
                 f"The model must of type Container, Model or Component. The type provided is: {str(type(model))}."
             )
 
-    def fit(self, df: pd.DataFrame, config):
-        self.datamodule = TimeDataModule(df, config)
-        metrics = self.model.fit(config, self.datamodule, self.experiment_name, None)
+    def fit(self, df: pd.DataFrame, config, n_forecasts, batch_size=128):
+        self.datamodule = TimeDataModule(df, config, n_forecasts, batch_size)
+        metrics = self.model.fit(
+            config, self.datamodule, n_forecasts, self.experiment_name, None
+        )
         return metrics
 
     def predict(self, df: pd.DataFrame):

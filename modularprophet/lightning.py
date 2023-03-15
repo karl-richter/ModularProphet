@@ -17,7 +17,7 @@ class LightningModel(pl.LightningModule):
     def __init__(
         self,
         model,
-        optimizer,
+        optimizer=None,
         compute_components=True,
         **kwargs,
     ):
@@ -54,7 +54,7 @@ class LightningModel(pl.LightningModule):
                 self.parameters(), max_iter=50, lr=self.lr
             )
             return self.optimizer
-        else:
+        elif self._optimizer is not None:
             raise ValueError(f"Invalid optimizer: {self._optimizer}")
 
     def loss_func(self, y_hat, y):

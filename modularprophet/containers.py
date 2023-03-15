@@ -1,8 +1,9 @@
 import logging
 import time
 import pandas as pd
+import torch.nn as nn
 
-from modularprophet.compositions import Composition
+from modularprophet.compositions import Composition, Single
 from modularprophet.components import Component
 from modularprophet.utils import models_to_summary, validate_inputs
 from modularprophet.lightning import LightningModel
@@ -11,8 +12,9 @@ from modularprophet.utils_lightning import configure_trainer, find_lr
 logger = logging.getLogger("experiments")
 
 
-class Container:
+class Container(nn.ModuleList):
     def __init__(self, name):
+        super().__init__()
         self.name = name
 
     def _train(
@@ -68,10 +70,18 @@ class Container:
 
         metrics = pd.DataFrame(metrics_logger.get_last_metrics())
 
-        return model, trainer, metrics
+        return model.model, trainer, metrics
 
     def fit(self):
         pass
+
+    def post_init(self, n_forecasts):
+        for model in self.models:
+            if isinstance(model, Component):
+                model.post_init(n_forecasts)
+            else:
+                for m in model:
+                    m.post_init(n_forecasts)
 
     def __repr__(self):
         return models_to_summary(self.name, self.models)
@@ -81,11 +91,14 @@ class Model(Container):
     def __init__(self, model):
         super().__init__("Model")
         validate_inputs([model], [Composition, Component])
+        if isinstance(model, Component):
+            model = Single(model)
         self.models = model
         self.datamodule = None
         self.trainer = None
 
-    def fit(self, config, datamodule, experiment_name, target):
+    def fit(self, config, datamodule, n_forecasts, experiment_name, target):
+        self.post_init(n_forecasts=n_forecasts)
         self.datamodule = datamodule
         self.models, self.trainer, metrics = self._train(
             self.models, config, self.datamodule, experiment_name, target
@@ -93,7 +106,8 @@ class Model(Container):
         return metrics
 
     def predict(self):
-        predictions_raw = self.trainer.predict(self.models, self.datamodule)
+        model = LightningModel(self.models)
+        predictions_raw = self.trainer.predict(model, self.datamodule)
         return predictions_raw
 
 

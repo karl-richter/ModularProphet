@@ -106,14 +106,14 @@ class TimeSeries(Dataset):
 
 
 class TimeDataModule(pl.LightningDataModule):
-    def __init__(self, df, config):
+    def __init__(self, df, config, n_forecasts, batch_size):
         super().__init__()
         self.config = config
 
         # Set parameters
-        self.n_forecasts = config.get("model.args.n_forecasts")
+        self.n_forecasts = n_forecasts
         self.n_lags = config.get("model.args.n_lags")
-        self.batch_size = config.get("training.batch_size")
+        self.batch_size = batch_size
 
         # Load data and pre-process
         self.df_raw = df

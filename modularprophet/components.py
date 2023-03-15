@@ -8,7 +8,11 @@ class Component(ABC, nn.Module):
         super().__init__()
         self.name = name
         self.feature = feature
+        self.n_forecasts = None
         self.id = id
+
+    def post_init(self, n_forecasts):
+        self.n_forecasts = n_forecasts
 
     @abstractmethod
     def forward(self, x):
@@ -41,7 +45,7 @@ class Trend(Component):
         return trend_k0, trend_k1
 
     def forward(self, x):
-        return (self.trend_k0 + self.trend_k1 * x[self.feature], None)
+        return self.trend_k0 + self.trend_k1 * x[self.feature]
 
 
 class Regressor(Component):
