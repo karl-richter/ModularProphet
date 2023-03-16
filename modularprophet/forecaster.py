@@ -40,45 +40,19 @@ class ModularProphet:
         predictions_raw = self.model.predict()
         if predictions_raw[0]["components"] is None:
             predictions_raw[0]["components"] = {}
-        # Extract 1-step ahead forecast from batches
-        predictions_list = [
-            {
-                "x": batch["x"][:, 0].detach().numpy(),
-                "y": batch["y"][:, 0].detach().numpy(),
-                "y_hat": batch["y_hat"][:, 0].detach().numpy(),
-                **{
-                    name: c[:, 0].detach().numpy()
-                    for name, c in batch["components"].items()
-                },
-            }
-            for batch in predictions_raw
-        ]
-
-        # Append the n-step ahead forecast of the last batch
-        predictions_list.append(
-            [
-                {
-                    "x": batch["x"][-1, 1:].detach().numpy(),
-                    "y": batch["y"][-1, 1:].detach().numpy(),
-                    "y_hat": batch["y_hat"][-1, 1:].detach().numpy(),
-                    **{
-                        name: c[-1, 1:].detach().numpy()
-                        for name, c in batch["components"].items()
-                    },
-                }
-                for batch in [predictions_raw[-1]]
-            ][0]
+        x = np.concatenate([batch["x"].numpy() for batch in predictions_raw], axis=0)
+        y = np.concatenate([batch["y"].numpy() for batch in predictions_raw], axis=0)
+        y_hat = np.concatenate(
+            [batch["y_hat"].numpy() for batch in predictions_raw], axis=0
         )
-
-        cols = predictions_list[0].keys()
-        predictions_dict = {}
-        for column in cols:
-            predictions_dict[column] = np.concatenate(
-                [batch[column] for batch in predictions_list]
+        components = {
+            component: np.concatenate(
+                [batch["components"][component] for batch in predictions_raw], axis=0
             )
-
-        predictions = pd.DataFrame(predictions_dict)
-        return predictions
+            for component in predictions_raw[0]["components"].keys()
+        }
+        components["y_hat"] = y_hat
+        return x, y, y_hat, components
 
     def __repr__(self):
         return self.model.__repr__()
