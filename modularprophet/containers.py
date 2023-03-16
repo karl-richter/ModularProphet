@@ -105,7 +105,8 @@ class Model(Container):
         )
         return metrics
 
-    def predict(self):
+    def predict(self, datamodule):
+        self.datamodule = datamodule
         model = LightningModel(self.models)
         predictions_raw = self.trainer.predict(model, self.datamodule)
         return predictions_raw

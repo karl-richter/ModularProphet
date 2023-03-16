@@ -109,6 +109,8 @@ class TimeDataModule(pl.LightningDataModule):
     def __init__(self, df, config, n_forecasts, batch_size):
         super().__init__()
         self.config = config
+        self.shift = None
+        self.scale = None
 
         # Set parameters
         self.n_forecasts = n_forecasts
@@ -131,6 +133,11 @@ class TimeDataModule(pl.LightningDataModule):
         self.df_train = self.df[: -self.n_forecasts].copy()
         self.df_predict = self.df.copy()  # self.df[-(self.n_lags + self.n_forecasts) :]
         self.df_predict["target_raw"] = self.df_predict["target"].copy()
+
+    def update_predict_df(self, df):
+        self.df_predict = df.copy()
+        self.df_predict = self.df_predict.rename(columns={"ds": "time", "y": "target"})
+        self.df_predict = self.pre_process_dataframe(self.df_predict)[0]
 
     def prepare_data(self):
         pass
@@ -261,9 +268,12 @@ class TimeDataModule(pl.LightningDataModule):
         norm_df = df[normalization_columns].copy()
 
         # Scaling
-        shift, scale = self.get_scaling_params(
-            norm_df, normalization={"target": normalization, "time": "minmax"}
-        )
+        if not self.shift or not self.scale:
+            shift, scale = self.get_scaling_params(
+                norm_df, normalization={"target": normalization, "time": "minmax"}
+            )
+        else:
+            shift, scale = self.shift, self.scale
 
         # Normalize
         for feature in shift.keys():
@@ -273,18 +283,18 @@ class TimeDataModule(pl.LightningDataModule):
         df["lags"] = df["target"].copy()
 
         ### Smoothing ###
-        smoothing_factor = max(int(len(df) / 2 * 0.05), 1) * 2
+        # smoothing_factor = max(int(len(df) / 2 * 0.05), 1) * 2
 
         # Hamming filter smoothing
-        padded_arget = np.pad(
-            np.array(df["target"]), pad_width=round(smoothing_factor / 2), mode="edge"
-        )
-        window = np.hamming(smoothing_factor)
-        df["hamming"] = np.convolve(
-            window / window.sum(),
-            padded_arget,
-            mode="valid",
-        )[1:]
+        # padded_arget = np.pad(
+        #     np.array(df["target"]), pad_width=round(smoothing_factor / 2), mode="edge"
+        # )
+        # window = np.hamming(smoothing_factor)
+        # df["hamming"] = np.convolve(
+        #     window / window.sum(),
+        #     padded_arget,
+        #     mode="valid",
+        # )[1:]
 
         return df, shift, scale
 
