@@ -1,4 +1,7 @@
+import logging
 from modularprophet.components import Component
+
+logger = logging.getLogger("experiments")
 
 
 def validate_inputs(items, instances):
@@ -28,3 +31,15 @@ def components_to_summary(name, items):
         )
         + "\n\t)"
     )
+
+
+def get_n_lags_from_model(model):
+    n_lags = 0
+    for component in model.models:
+        if hasattr(component, "n_lags"):
+            n_lags = component.n_lags
+    if n_lags == 0:
+        logger.warning(
+            "The model does not contain any components with n_lags attribute."
+        )
+    return n_lags

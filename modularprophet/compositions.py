@@ -45,29 +45,56 @@ class Additive(Composition):
     def forward(self, x):
         components = {}
         for component in self.components:
-            components[component.name] = component.forward(x)
-        prediction = torch.stack([*components.values()], axis=0).sum(axis=0)
-        return prediction, components
+            forward = component.forward(x)
+            if component.multiply_with is not None:
+                forward = torch.multiply(forward, components[component.multiply_with])
+            components[component.name] = forward
+        y_hat = torch.stack([*components.values()], axis=0).sum(axis=0)
+        return y_hat, components
 
 
 class Stationary(Composition):
     def __init__(self, *components):
         super().__init__("Stationary")
         validate_inputs(components, Component)
-        self.components = components
+        self.components = nn.ModuleList(components)
 
     def forward(self, x):
         non_stationary_components = {}
         for component in [c for c in self.components if not c.stationary]:
-            non_stationary_components[component.name] = component.forward(x)
+            non_stationary_forward = component.forward(x["lagged"])
+            if component.multiply_with is not None:
+                non_stationary_forward = torch.multiply(
+                    non_stationary_forward,
+                    non_stationary_components[component.multiply_with],
+                )
+            non_stationary_components[component.name] = non_stationary_forward
 
-        x["lags"] = x["lags"] - sum(non_stationary_components.values())
+        # Sum all non-stationary components
+        y_hat_non_stationary = torch.stack(
+            [*non_stationary_components.values()], axis=0
+        ).sum(axis=0)
 
+        # Subtract portion explained by the non-stationary components from the lags
+        # NOTE: This is a critical point in the compoitation, to allow for gradient flow, one is not allowed to
+        # overwrite objects that are involved in the computational graph. Thus, the following would break the code.
+        #    x["lags"] = x["lags"] - y_hat_non_stationary
+        # Instead, we create a new dictionary with the updated values.
+        x_ = {k: x[k] for k in x.keys() if k != "lags"}
+        x_["lags"] = x["lags"] - y_hat_non_stationary
+
+        # Component-wise forward pass of stationary components
         components = {}
         for component in self.components:
-            components[component.name] = component.forward(x)
-        prediction = sum(components.values())
-        return prediction, components
+            forward = component.forward(x_)
+            if component.multiply_with is not None:
+                forward = torch.multiply(forward, components[component.multiply_with])
+            # Add the component to the dictionary
+            components[component.name] = forward
+
+        # Component composition
+        y_hat = torch.stack([*components.values()], axis=0).sum(axis=0)
+        return y_hat, components
 
 
 class Weighted(Composition):

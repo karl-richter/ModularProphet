@@ -3,7 +3,7 @@ import time
 import pandas as pd
 import torch.nn as nn
 
-from modularprophet.compositions import Composition, Single
+from modularprophet.compositions import Composition, Single, Additive
 from modularprophet.components import Component
 from modularprophet.utils import models_to_summary, validate_inputs
 from modularprophet.lightning import LightningModel
@@ -20,8 +20,10 @@ class Container(nn.ModuleList):
     def _train(
         self,
         model,
-        config,
         datamodule,
+        optimizer,
+        learning_rate,
+        epochs,
         experiment_name,
         compute_components=True,
         target=None,
@@ -33,7 +35,7 @@ class Container(nn.ModuleList):
         model = LightningModel(
             model=model,
             compute_components=compute_components,
-            optimizer=config.get("training.optimizer"),
+            optimizer=optimizer,
         )
 
         # Specify the target to train the model on (if specified)
@@ -44,11 +46,12 @@ class Container(nn.ModuleList):
 
         #### Trainer ####
         trainer, checkpoint_callback, metrics_logger = configure_trainer(
-            config.get_config("training"),
+            optimizer,
+            epochs,
             experiment_name=experiment_name,
         )
-        if "learning_rate" in config.get("training").keys():
-            model.lr = config.get("training.learning_rate")
+        if learning_rate is not None:
+            model.lr = learning_rate
         else:
             model.lr = find_lr(trainer, model, dataloader)
             logger.info(f"Found optimal learning rate: {round(model.lr, 6)}")
@@ -97,33 +100,107 @@ class Model(Container):
         self.datamodule = None
         self.trainer = None
 
-    def fit(self, config, datamodule, n_forecasts, experiment_name, target):
+    def fit(
+        self,
+        datamodule,
+        n_forecasts,
+        optimizer,
+        learning_rate,
+        epochs,
+        experiment_name,
+        target,
+    ):
         self.post_init(n_forecasts=n_forecasts)
-        self.datamodule = datamodule
         self.models, self.trainer, metrics = self._train(
-            self.models, config, self.datamodule, experiment_name, target
+            self.models,
+            datamodule,
+            optimizer,
+            learning_rate,
+            epochs,
+            experiment_name,
+            target,
         )
         return metrics
 
     def predict(self, datamodule):
-        self.datamodule = datamodule
         model = LightningModel(self.models)
-        predictions_raw = self.trainer.predict(model, self.datamodule)
+        predictions_raw = self.trainer.predict(model, datamodule)
         return predictions_raw
 
 
 class Sequential(Container):
+    """
+    Sequentially fit the model components.
+    Feed the trained model component weights back into the composed model.
+    """
+
     def __init__(self, *models):
         super().__init__("Sequential")
         validate_inputs(models, [Composition, Component])
         self.models = models
 
-    def fit(self, df):
-        for model in self.models:
-            model.fit(df)
-            prediction = model.predict(df)
-            df = df - prediction
-        return model
+    def fit(
+        self,
+        datamodule,
+        n_forecasts,
+        optimizer,
+        learning_rate,
+        epochs,
+        experiment_name,
+        target,
+    ):
+        self.post_init(n_forecasts=n_forecasts)
+
+        metrics = None
+        for i, model in enumerate(self.models):
+            if isinstance(model, Component):
+                model = Single(model)
+            model, trainer, _metrics = self._train(
+                model,
+                datamodule,
+                optimizer,
+                learning_rate,
+                epochs,
+                experiment_name,
+                target,
+            )
+
+            # Collect all metrics
+            _metrics["component"] = i
+            if metrics is None:
+                metrics = _metrics
+            else:
+                metrics = pd.concat([metrics, _metrics], axis=0)
+
+            # Transfer model weights to the joint model
+            if isinstance(model, Single):
+                state_dict = model.components[0].state_dict()
+            else:
+                state_dict = model.state_dict()
+            self.models[i].load_state_dict(state_dict)
+
+            # Check whether to remove the prediction from the target,
+            # skip for the last model
+            if (i + 1) < len(self.models):
+                #### Predict ####
+                prediction = trainer.predict(
+                    LightningModel(model),
+                    datamodule.train_dataloader(shuffle=False),
+                )
+                # Remove the prediction from the target
+                datamodule.remove_prediction_from_input(
+                    prediction, cols=["lags", "target"]
+                )
+                pass
+            else:
+                self.trainer = trainer
+
+        return metrics
+
+    def predict(self, datamodule):
+        model = LightningModel(Additive(*self.models))
+        predictions_raw = self.trainer.predict(model, datamodule)
+        return predictions_raw
 
 
 class Ensemble(Container):

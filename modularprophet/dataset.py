@@ -106,15 +106,16 @@ class TimeSeries(Dataset):
 
 
 class TimeDataModule(pl.LightningDataModule):
-    def __init__(self, df, config, n_forecasts, batch_size):
+    def __init__(self, df, model, n_forecasts, n_lags, optimizer, batch_size):
         super().__init__()
-        self.config = config
+        self.model = model
+        self.optimizer = optimizer
         self.shift = None
         self.scale = None
 
         # Set parameters
         self.n_forecasts = n_forecasts
-        self.n_lags = config.get("model.args.n_lags")
+        self.n_lags = n_lags
         self.batch_size = batch_size
 
         # Load data and pre-process
@@ -122,22 +123,27 @@ class TimeDataModule(pl.LightningDataModule):
 
         self.df = self.df_raw.copy()
         self.df = self.df.rename(columns={"ds": "time", "y": "target"})
-        self.df, self.shift, self.scale = self.pre_process_dataframe(self.df)
+        self.df, self.shift, self.scale = self.pre_process_dataframe(
+            self.df, self.model.models
+        )
 
         self.lagged_features = ["lags"]
-        self.future_features = ["time"]  # + [
-        #     component.get("args.feature") for component in config.model.components
-        # ]
+        self.future_features = ["time"] + [
+            component.feature for component in self.model.models
+        ]
 
         # Split data
-        self.df_train = self.df[: -self.n_forecasts].copy()
-        self.df_predict = self.df.copy()  # self.df[-(self.n_lags + self.n_forecasts) :]
-        self.df_predict["target_raw"] = self.df_predict["target"].copy()
+        self.df_train = self.df.copy()  # self.df[: -self.n_forecasts].copy()
+        self.df_predict = None
+        # self.df_predict = self.df.copy()  # self.df[-(self.n_lags + self.n_forecasts) :]
+        # self.df_predict["target_raw"] = self.df_predict["target"].copy()
 
     def update_predict_df(self, df):
         self.df_predict = df.copy()
         self.df_predict = self.df_predict.rename(columns={"ds": "time", "y": "target"})
-        self.df_predict = self.pre_process_dataframe(self.df_predict)[0]
+        self.df_predict = self.pre_process_dataframe(
+            self.df_predict, self.model.models
+        )[0]
 
     def prepare_data(self):
         pass
@@ -164,7 +170,7 @@ class TimeDataModule(pl.LightningDataModule):
         return DataLoader(
             dataset_train,
             batch_size=self.batch_size
-            if self.config.get("training.optimizer") != "bfgs"
+            if self.optimizer != "bfgs"
             else len(dataset_train),
             shuffle=shuffle,
         )
@@ -184,7 +190,7 @@ class TimeDataModule(pl.LightningDataModule):
         return DataLoader(
             dataset_predict,
             batch_size=self.batch_size
-            if self.config.get("training.optimizer") != "bfgs"
+            if self.optimizer != "bfgs"
             else len(dataset_predict),
             shuffle=False,
         )
@@ -236,16 +242,16 @@ class TimeDataModule(pl.LightningDataModule):
         y_hat = torch.cat([y_hat[0].repeat(self.n_lags), y_hat])
         # Remove the learned component from the target in the training data
         for col in cols:
-            self.df_train[col] = self.df_train[col] - pd.Series(y_hat.detach().numpy())
+            self.df_train[col] = self.df_train[col] - y_hat.detach().numpy()
         # Repeat the last value of the target to match the length of the prediction data
-        y_hat = torch.cat([y_hat, y_hat[-1].repeat(self.n_forecasts)])
+        # y_hat = torch.cat([y_hat, y_hat[-1].repeat(self.n_forecasts)])
         # Remove the learned component from the target in the prediction data
-        for col in cols:
-            self.df_predict[col] = self.df_predict[col] - pd.Series(
-                y_hat.detach().numpy()
-            )
+        # for col in cols:
+        #    self.df_predict[col] = self.df_predict[col] - pd.Series(
+        #        y_hat.detach().numpy()
+        #    )
 
-    def pre_process_dataframe(self, df, normalization="standard"):
+    def pre_process_dataframe(self, df, model, normalization="standard"):
         logger.info(f"Pre-processing dataframe with {len(df)} samples")
 
         df = df.copy()
@@ -259,8 +265,7 @@ class TimeDataModule(pl.LightningDataModule):
         df["dayofweek"] = df["dt"].dt.dayofweek
         df["hour"] = df["dt"].dt.hour
 
-        # Fourier terms
-        # TODO: df = self.add_fourier_features(df, config=self.config.model.components)
+        df = self.extract_features_from_model(df, model)
 
         # Set normalization parameters
         # Only normalize the columns that are used for normalization
@@ -282,21 +287,12 @@ class TimeDataModule(pl.LightningDataModule):
         # Copy the target into a lag column
         df["lags"] = df["target"].copy()
 
-        ### Smoothing ###
-        # smoothing_factor = max(int(len(df) / 2 * 0.05), 1) * 2
-
-        # Hamming filter smoothing
-        # padded_arget = np.pad(
-        #     np.array(df["target"]), pad_width=round(smoothing_factor / 2), mode="edge"
-        # )
-        # window = np.hamming(smoothing_factor)
-        # df["hamming"] = np.convolve(
-        #     window / window.sum(),
-        #     padded_arget,
-        #     mode="valid",
-        # )[1:]
-
         return df, shift, scale
+
+    def extract_features_from_model(self, df, model):
+        for component in model:
+            df = component.extract_features(df)
+        return df
 
     def get_scaling_params(self, norm_df, normalization):
         """
@@ -322,21 +318,6 @@ class TimeDataModule(pl.LightningDataModule):
                 )
 
         return shift, scale
-
-    def add_fourier_features(self, df, config):
-        df = df.copy()
-        for component in config:
-            if component.get("name") == "FourierSeasonality":
-                period = component.get("args.period")
-                series_order = component.get("args.series_order")
-                df[component.get("args.feature")] = df["time"].apply(
-                    lambda t: [
-                        fun((2.0 * (i + 1) * np.pi * (t / 3600 / 24) / period))
-                        for i in range(series_order)
-                        for fun in (np.sin, np.cos)
-                    ]
-                )
-        return df
 
     def get_autocorrelation(self, target: str, df=None, lags=None):
         """

@@ -6,6 +6,7 @@ from modularprophet.containers import Container, Model
 from modularprophet.compositions import Composition
 from modularprophet.components import Component
 from modularprophet.dataset import TimeDataModule
+from modularprophet.utils import get_n_lags_from_model
 
 logger = logging.getLogger("experiments")
 
@@ -16,6 +17,7 @@ class ModularProphet:
     def __init__(self, model):
         self.model = self.validate_model(model)
         self.experiment_name = None
+        self.n_forecasts = None
 
     def validate_model(self, model):
         if isinstance(model, Container):
@@ -27,13 +29,28 @@ class ModularProphet:
                 f"The model must of type Container, Model or Component. The type provided is: {str(type(model))}."
             )
 
-    def fit(self, df: pd.DataFrame, config, n_forecasts, batch_size=128):
-        self.config = config
+    def fit(
+        self,
+        df: pd.DataFrame,
+        n_forecasts,
+        optimizer="bfgs",
+        learning_rate=None,
+        epochs=50,
+        batch_size=128,
+    ):
+        n_lags = get_n_lags_from_model(self.model)
         self.n_forecasts = n_forecasts
-        self.batch_size = batch_size
-        self.datamodule = TimeDataModule(df, config, n_forecasts, batch_size)
+        self.datamodule = TimeDataModule(
+            df, self.model, n_forecasts, n_lags, optimizer, batch_size
+        )
         metrics = self.model.fit(
-            config, self.datamodule, n_forecasts, self.experiment_name, None
+            self.datamodule,
+            n_forecasts,
+            optimizer,
+            learning_rate,
+            epochs,
+            self.experiment_name,
+            None,
         )
         return metrics
 

@@ -10,6 +10,8 @@ class Component(ABC, nn.Module):
         self.feature = feature
         self.n_forecasts = None
         self.id = id
+        self.stationary = False
+        self.multiply_with = None
 
     def post_init(self, n_forecasts):
         self.n_forecasts = n_forecasts
@@ -20,6 +22,12 @@ class Component(ABC, nn.Module):
 
     def freeze(self):
         pass
+
+    def extract_features(self, df):
+        """
+        Optional: Extract custom features from the dataframe.
+        """
+        return df
 
     def __repr__(self):
         return f"{self.name}{tuple(self.kwargs.values())}"
@@ -54,7 +62,7 @@ class Regressor(Component):
         self.kwargs = locals()
         self.kwargs.pop("self")
         self.kwargs.pop("__class__")
-
+        self.stationary = False
         self.id = id
 
     def forward(self, x):

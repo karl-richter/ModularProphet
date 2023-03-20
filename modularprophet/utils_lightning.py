@@ -10,10 +10,10 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.utilities import rank_zero_only
 
 
-def configure_trainer(config, experiment_name: str) -> Trainer:
+def configure_trainer(optimizer, epochs, experiment_name: str) -> Trainer:
     #### Callbacks ####
     checkpoint_callback = ModelCheckpoint(
-        monitor=config.get("optimization_metric", "loss"),
+        monitor="loss",
         mode="min",
         save_top_k=1,
         save_last=True,
@@ -28,16 +28,13 @@ def configure_trainer(config, experiment_name: str) -> Trainer:
 
     #### Progress bar ####
 
-    progress_bar_callback = LightningProgressBar(
-        refresh_rate=50, max_epochs=config.get("epochs")
-    )
+    progress_bar_callback = LightningProgressBar(refresh_rate=50, max_epochs=epochs)
 
     #### Trainer ####
     trainer = Trainer(
         # accelerator="mps",
         # devices=1,
-        max_epochs=config.get("epochs") if config.get("optimizer") != "bfgs" else 1,
-        limit_train_batches=config.get("limit_train_batches", None),
+        max_epochs=epochs if optimizer != "bfgs" else 1,
         logger=metrics_logger,
         callbacks=[],  # checkpoint_callback, progress_bar_callback
         enable_progress_bar=False,
