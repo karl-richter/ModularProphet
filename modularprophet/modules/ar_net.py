@@ -13,6 +13,7 @@ class LaggedNet(Component):
         self.n_hidden = n_hidden
         self.d_hidden = d_hidden
         self.network = None
+        self.stationary = True
 
     def post_init(self, n_forecasts):
         super().post_init(n_forecasts)
