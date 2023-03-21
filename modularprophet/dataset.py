@@ -128,9 +128,9 @@ class TimeDataModule(pl.LightningDataModule):
         )
 
         self.lagged_features = ["lags"]
-        self.future_features = ["time"] + [
-            component.feature for component in self.model.models
-        ]
+        self.future_features = ["time"] + sum(
+            [component.get_features() for component in self.model.models], []
+        )
 
         # Split data
         self.df_train = self.df.copy()  # self.df[: -self.n_forecasts].copy()

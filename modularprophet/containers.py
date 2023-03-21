@@ -25,6 +25,7 @@ class Container(nn.ModuleList):
         learning_rate,
         epochs,
         experiment_name,
+        constraint=None,
         compute_components=True,
         target=None,
     ):
@@ -34,8 +35,9 @@ class Container(nn.ModuleList):
         # Wrap model in LightningModule
         model = LightningModel(
             model=model,
-            compute_components=compute_components,
             optimizer=optimizer,
+            constraint=constraint,
+            compute_components=compute_components,
         )
 
         # Specify the target to train the model on (if specified)
@@ -107,18 +109,20 @@ class Model(Container):
         optimizer,
         learning_rate,
         epochs,
+        constraint,
         experiment_name,
         target,
     ):
         self.post_init(n_forecasts=n_forecasts)
         self.models, self.trainer, metrics = self._train(
-            self.models,
-            datamodule,
-            optimizer,
-            learning_rate,
-            epochs,
-            experiment_name,
-            target,
+            model=self.models,
+            datamodule=datamodule,
+            optimizer=optimizer,
+            learning_rate=learning_rate,
+            epochs=epochs,
+            experiment_name=experiment_name,
+            constraint=constraint,
+            target=target,
         )
         return metrics
 
@@ -146,6 +150,7 @@ class Sequential(Container):
         optimizer,
         learning_rate,
         epochs,
+        constraint,
         experiment_name,
         target,
     ):
@@ -161,6 +166,7 @@ class Sequential(Container):
                 optimizer,
                 learning_rate,
                 epochs,
+                constraint,
                 experiment_name,
                 target,
             )

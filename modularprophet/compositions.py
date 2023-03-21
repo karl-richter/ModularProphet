@@ -15,6 +15,17 @@ class Composition(ABC, nn.ModuleList):
     def forward(self, x):
         pass
 
+    def extract_features(self, df):
+        for component in self.components:
+            df = component.extract_features(df)
+        return df
+
+    def get_features(self):
+        features = []
+        for component in self.components:
+            features.extend(component.get_features())
+        return features
+
     def __iter__(self):
         return self.components.__iter__()
 
@@ -39,16 +50,23 @@ class Single(Composition):
 class Additive(Composition):
     def __init__(self, *components):
         super().__init__("Additive")
-        validate_inputs(components, Component)
+        validate_inputs(components, [Component, Composition])
         self.components = nn.ModuleList(components)
 
     def forward(self, x):
         components = {}
         for component in self.components:
             forward = component.forward(x)
-            if component.multiply_with is not None:
+            if (
+                hasattr(component, "multiply_with")
+                and component.multiply_with is not None
+            ):
+                #            if component.multiply_with is not None:
                 forward = torch.multiply(forward, components[component.multiply_with])
-            components[component.name] = forward
+            if isinstance(component, Composition):
+                components.update(forward[1])
+            else:
+                components[component.name] = forward
         y_hat = torch.stack([*components.values()], axis=0).sum(axis=0)
         return y_hat, components
 

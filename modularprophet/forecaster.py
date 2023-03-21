@@ -37,6 +37,7 @@ class ModularProphet:
         learning_rate=None,
         epochs=50,
         batch_size=128,
+        constraint=None,
     ):
         n_lags = get_n_lags_from_model(self.model)
         self.n_forecasts = n_forecasts
@@ -44,18 +45,22 @@ class ModularProphet:
             df, self.model, n_forecasts, n_lags, optimizer, batch_size
         )
         metrics = self.model.fit(
-            self.datamodule,
-            n_forecasts,
-            optimizer,
-            learning_rate,
-            epochs,
-            self.experiment_name,
-            None,
+            datamodule=self.datamodule,
+            n_forecasts=n_forecasts,
+            optimizer=optimizer,
+            learning_rate=learning_rate,
+            epochs=epochs,
+            constraint=constraint,
+            experiment_name=self.experiment_name,
+            target=None,
         )
         return metrics
 
-    def denormalize(self, array, kind="target"):
-        return array * self.datamodule.scale[kind] + self.datamodule.shift[kind]
+    def denormalize(self, array, kind="target", shift=True):
+        denormalized = array * self.datamodule.scale[kind]
+        if shift:
+            denormalized += self.datamodule.shift[kind]
+        return denormalized
 
     def predict(self, df: pd.DataFrame):
         self.datamodule.update_predict_df(df)
@@ -80,7 +85,8 @@ class ModularProphet:
                 np.concatenate(
                     [batch["components"][component] for batch in predictions_raw],
                     axis=0,
-                )
+                ),
+                shift=component == "Trend",
             )
             for component in predictions_raw[0]["components"].keys()
         }

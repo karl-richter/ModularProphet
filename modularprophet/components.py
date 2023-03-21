@@ -29,6 +29,9 @@ class Component(ABC, nn.Module):
         """
         return df
 
+    def get_features(self):
+        return [self.feature]
+
     def __repr__(self):
         return f"{self.name}{tuple(self.kwargs.values())}"
 
