@@ -18,6 +18,7 @@ class LightningModel(pl.LightningModule):
         self,
         model,
         optimizer=None,
+        constraint=None,
         compute_components=True,
         **kwargs,
     ):
@@ -25,6 +26,7 @@ class LightningModel(pl.LightningModule):
         self.lr = 0.001
         self.model = model
         self._optimizer = optimizer
+        self.constraint = constraint
         self.compute_components = compute_components
 
     def configure_optimizers(self):
@@ -60,10 +62,47 @@ class LightningModel(pl.LightningModule):
     def loss_func(self, y_hat, y):
         return nn.SmoothL1Loss(reduction="mean")(y_hat, y)
 
+    def constrain_stationarity(self, components, y):
+        stationary_components = [c for c in components.keys() if c != "LaggedNet"]
+        return self.loss_func(
+            torch.stack([components[c] for c in stationary_components], axis=0).sum(
+                axis=0
+            ),
+            y["target"],
+        )
+
+    def constrain_incremental(self, components, y):
+        component_loss = {}
+        prev_components = None
+        for name, component in components.items():
+            component_loss[name] = self.loss_func(component, y["target"])
+            if prev_components is not None:
+                prev_components = torch.stack([prev_components, component], axis=0).sum(
+                    axis=0
+                )
+            else:
+                prev_components = component
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.1
+
+    def constrain_zero_mean(self, components, y):
+        component_loss = {}
+        for component in [c for c in self.model.components if c.name == "LaggedNet"]:
+            # Calculate the sum of the absolute integral between the y and x axis
+            component_loss[component.name] = torch.sum(components[component.name])
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.1
+
     def training_step(self, batch, batch_idx):
         x, y = batch
         y_hat, components = self.model.forward(x)
         loss = self.loss_func(y_hat, y["target"])
+        # Adding constraints
+        if components is not None:
+            if self.constraint == "stationarity":
+                loss += self.constrain_stationarity(components=components, y=y)
+            elif self.constraint == "incremental":
+                loss += self.constrain_incremental(components=components, y=y)
+            elif self.constraint == "zeromean":
+                loss += self.constrain_zero_mean(components=components, y=y)
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
