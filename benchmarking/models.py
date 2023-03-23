@@ -1,3 +1,4 @@
+import math
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -36,14 +37,16 @@ def evaluate_modularprophet(
     seasonal_cycle,
     model=None,
     constraint=None,
+    n_rows=-1,
 ):
-    df = pd.read_csv(dataset)
+    df = pd.read_csv(dataset).tail(n_rows)
     num_splits = (holdout - 2 * n_forecasts) + 1
     metrics = {}
     predictions = []
     attributions = {}
 
     for i in range(0, num_splits, step_size):
+        print(f"Split {i} of {math.ceil(num_splits/ step_size)}")
         train_df, eval_df, y = split_data(df, i, holdout, n_forecasts, n_lags)
         forecaster = ModularProphet(model)
         _ = forecaster.fit(

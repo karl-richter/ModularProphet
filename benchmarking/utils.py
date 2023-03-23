@@ -36,12 +36,28 @@ def split_data(df, i, holdout, n_forecasts, n_lags):
     return train_df, eval_df, y
 
 
-def store_dataframes(metrics, predictions, components, dataset, model_name):
+def store_dataframes(
+    metrics,
+    predictions,
+    components,
+    dataset,
+    model_name,
+    constraint=None,
+    composition=None,
+):
+    composition = (
+        composition.name if composition.name != "Single" else composition.__repr__()
+    )
+    filename = "_".join([model_name, constraint, composition])
     dataset = dataset.split("/")[-1].split(".")[0]
-    metrics.to_csv(f"benchmarking/{dataset}/{model_name}_metrics.csv", index=False)
+    metrics["model"] = model_name
+    metrics["constraint"] = constraint
+    metrics["composition"] = composition
+    metrics.to_csv(f"benchmarking/{dataset}/{filename}_metrics.csv", index=False)
     predictions.to_csv(
-        f"benchmarking/{dataset}/{model_name}_predictions.csv", index=False
+        f"benchmarking/{dataset}/{filename}_predictions.csv", index=False
     )
-    components.to_csv(
-        f"benchmarking/{dataset}/{model_name}_components.csv", index=False
-    )
+    components["model"] = model_name
+    components["constraint"] = constraint
+    components["composition"] = composition
+    components.to_csv(f"benchmarking/{dataset}/{filename}_components.csv", index=False)
