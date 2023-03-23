@@ -3,7 +3,7 @@ import time
 import pandas as pd
 import torch.nn as nn
 
-from modularprophet.compositions import Composition, Single, Additive
+from modularprophet.compositions import Composition, Single, Stationary
 from modularprophet.components import Component
 from modularprophet.utils import models_to_summary, validate_inputs
 from modularprophet.lightning import LightningModel
@@ -204,7 +204,7 @@ class Sequential(Container):
         return metrics
 
     def predict(self, datamodule):
-        model = LightningModel(Additive(*self.models))
+        model = LightningModel(Stationary(*self.models))
         predictions_raw = self.trainer.predict(model, datamodule)
         return predictions_raw
 
