@@ -71,15 +71,15 @@ class LightningModel(pl.LightningModule):
             y["target"],
         )
 
-    def constrain_incremental(self, components, y):
+    def constrain_sequential(self, components, y):
         component_loss = {}
         prev_components = None
         for name, component in components.items():
             component_loss[name] = self.loss_func(component, y["target"])
             if prev_components is not None:
-                prev_components = torch.stack([prev_components, component], axis=0).sum(
-                    axis=0
-                )
+                prev_components = torch.stack(
+                    [prev_components.detach(), component], axis=0
+                ).sum(axis=0)
             else:
                 prev_components = component
         return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.1
@@ -88,7 +88,18 @@ class LightningModel(pl.LightningModule):
         component_loss = {}
         for component in [c for c in self.model.components if c.name == "LaggedNet"]:
             # Calculate the sum of the absolute integral between the y and x axis
-            component_loss[component.name] = torch.sum(components[component.name])
+            component_loss[component.name] = torch.mean(
+                torch.abs(torch.sum(components[component.name], axis=1)), axis=0
+            )
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.01
+
+    def constrain_smoothing(self, components, y):
+        component_loss = {}
+        for component in [c for c in self.model.components if c.name == "LaggedNet"]:
+            # Calculate the sum of the absolute integral between the y and x axis
+            component_loss[component.name] = torch.mean(
+                torch.abs(torch.sum(torch.diff(components[component.name], n=2), dim=1))
+            )
         return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.1
 
     def training_step(self, batch, batch_idx):
@@ -99,10 +110,12 @@ class LightningModel(pl.LightningModule):
         if components is not None:
             if self.constraint == "stationarity":
                 loss += self.constrain_stationarity(components=components, y=y)
-            elif self.constraint == "incremental":
-                loss += self.constrain_incremental(components=components, y=y)
+            elif self.constraint == "sequential":
+                loss += self.constrain_sequential(components=components, y=y)
             elif self.constraint == "zeromean":
                 loss += self.constrain_zero_mean(components=components, y=y)
+            elif self.constraint == "smoothing":
+                loss += self.constrain_smoothing(components=components, y=y)
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):
