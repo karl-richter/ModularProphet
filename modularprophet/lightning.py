@@ -100,7 +100,25 @@ class LightningModel(pl.LightningModule):
             component_loss[component.name] = torch.mean(
                 torch.abs(torch.sum(torch.diff(components[component.name], n=2), dim=1))
             )
-        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.1
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.01
+
+    def constrain_weights_l1(self):
+        component_loss = {}
+        for component in [c for c in self.model.components if c.name == "LaggedNet"]:
+            # Calculate the sum of the absolute integral between the y and x axis
+            component_loss[component.name] = torch.sum(
+                torch.abs(component.network[0].weight)
+            )
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.001
+
+    def constrain_weights_l2(self):
+        component_loss = {}
+        for component in [c for c in self.model.components if c.name == "LaggedNet"]:
+            # Calculate the sum of the absolute integral between the y and x axis
+            component_loss[component.name] = torch.sum(
+                torch.square(component.network[0].weight)
+            )
+        return torch.stack([*component_loss.values()], axis=0).sum(axis=0) * 0.001
 
     def training_step(self, batch, batch_idx):
         x, y = batch
@@ -116,6 +134,10 @@ class LightningModel(pl.LightningModule):
                 loss += self.constrain_zero_mean(components=components, y=y)
             elif self.constraint == "smoothing":
                 loss += self.constrain_smoothing(components=components, y=y)
+            elif self.constraint == "l1_regularization":
+                loss += self.constrain_weights_l1()
+            elif self.constraint == "l2_regularization":
+                loss += self.constrain_weights_l2()
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx=None):

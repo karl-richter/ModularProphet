@@ -36,7 +36,7 @@ from modularprophet.components import Component
 
 class FourierSeasonality(Component):
     def __init__(self, feature, period, series_order, multiply_with=None, growth=None):
-        super().__init__("FourierSeasonality", feature)
+        super().__init__(feature, feature)
         self.kwargs = locals()
         self.kwargs.pop("self")
         self.kwargs.pop("__class__")
