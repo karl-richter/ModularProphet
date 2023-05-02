@@ -8,6 +8,7 @@ This framework has been developed as part of the Master thesis "Interpretability
 ## Cite
 Please cite ModularProphet in your publications if it helps your research:
 
+```
 @software{richter2023modularprophet,
   author = {Richter, Karl},
   title = {{ModularProphet}},
@@ -15,3 +16,4 @@ Please cite ModularProphet in your publications if it helps your research:
   month = {04},
   year = {2023}
 }
+```
