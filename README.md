@@ -1,6 +1,6 @@
 # ModularProphet
 
-ModularProphet is a modular hybrid forecasting framework for interpretable time series forecasting. ModularProphet is re-designed and extendable version of NeuralProphet. The framework is built on PyTorch and combines Neural Network and traditional time-series algorithms, inspired by Facebook Prophet and AR-Net.
+ModularProphet is a modular hybrid forecasting framework for interpretable time series forecasting. ModularProphet is re-designed and extendable version of [NeuralProphet](https://github.com/ourownstory/neural_prophet). The framework is built on PyTorch and combines Neural Network and traditional time-series algorithms, inspired by Facebook Prophet and AR-Net.
 
 ## About
 This framework has been developed as part of the Master thesis "Interpretability Through Modularity: A Modular Framework for Hybrid Forecasting Model Creation" during a research stay at the Stanford Sustainable Systems Lab (S3L).
